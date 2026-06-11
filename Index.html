@@ -137,7 +137,7 @@
     <div class="logo-icon">🩺</div>
     <div>
       <div class="logo-text">MedTranscribe</div>
-      <div class="logo-sub">GEMINI 2.0 FLASH · LOCAL</div>
+      <div class="logo-sub">GEMINI 1.5 FLASH · LOCAL</div>
     </div>
   </div>
   <div style="display:flex;align-items:center;gap:4px">
@@ -245,7 +245,7 @@
     <div class="how-step"><span class="how-icon">👂</span><span class="how-text">O app transcreve tudo em tempo real durante o atendimento</span></div>
     <div class="how-step"><span class="how-icon">⚕</span><span class="how-text">Clique <strong>Gerar Prontuário</strong> — a IA estrutura no formato SOAP</span></div>
     <div class="how-step"><span class="how-icon">📋</span><span class="how-text">Copie e cole no seu sistema. O prontuário é salvo automaticamente no histórico</span></div>
-    <div id="tip">📋 <strong>Histórico:</strong> As últimas 7 consultas ficam salvas no navegador. Acesse pela aba Histórico para revisar, copiar ou excluir.</div>
+    <div id="tip">✦ <strong>Gemini 1.5 Flash gratuito:</strong> até 1.500 requisições/dia · Compatível com contas novas · Use Chrome ou Edge</div>
   </div>
 </div>
 
@@ -287,6 +287,7 @@
 //  STATE
 // ══════════════════════════════════════════════════════════════
 let phase='idle', elapsed=0, timerInt=null, finalText='', rec=null;
+let processedCount=0; // quantos resultados finais já foram gravados
 let currentSoap=null; // soap object of current/modal session
 const MAX_HIST = 7;
 const HIST_KEY = 'med_history';
@@ -378,24 +379,64 @@ function clearErr(){document.getElementById('error-box').style.display='none';}
 // ══════════════════════════════════════════════════════════════
 //  SPEECH
 // ══════════════════════════════════════════════════════════════
-function initRec(){
+
+// Abordagem anti-duplicata para mobile:
+// Cada instância de recognition acumula seus próprios finais em sessionText.
+// Quando reinicia, criamos nova instância com sessionText zerado,
+// mas finalText (acumulado global) já tem tudo — não concatenamos de novo.
+
+function createRec(){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SR) return null;
   const r=new SR();
   r.lang='pt-BR';r.continuous=true;r.interimResults=true;r.maxAlternatives=1;
+
+  // Textos finais desta sessão de recognition (reseta a cada nova instância)
+  let sessionFinals=[];
+
   r.onresult=(e)=>{
+    // Reconstruir sessionFinals com todos os resultados finais desta instância
+    const newFinals=[];
     let interim='';
-    for(let i=e.resultIndex;i<e.results.length;i++){
-      const t=e.results[i][0].transcript;
-      if(e.results[i].isFinal){finalText+=(finalText?' ':'')+t;document.getElementById('final-text').textContent=finalText;document.getElementById('interim').textContent='';}
-      else{interim+=t;}
+    for(let i=0;i<e.results.length;i++){
+      if(e.results[i].isFinal){
+        newFinals.push(e.results[i][0].transcript.trim());
+      } else {
+        interim+=e.results[i][0].transcript;
+      }
     }
-    if(interim) document.getElementById('interim').textContent=' '+interim;
+
+    // Só adiciona ao finalText os que são novos nesta sessão
+    for(let i=sessionFinals.length;i<newFinals.length;i++){
+      const t=newFinals[i];
+      if(t) finalText+=(finalText?' ':'')+t;
+    }
+    sessionFinals=newFinals;
+
+    document.getElementById('final-text').textContent=finalText;
+    document.getElementById('interim').textContent=interim?' '+interim:'';
   };
-  r.onerror=(e)=>{if(e.error!=='no-speech'&&e.error!=='aborted')showErr('Microfone: '+e.error);};
-  r.onend=()=>{if(phase==='recording'){try{r.start();}catch(_){}}};
+
+  r.onerror=(e)=>{
+    if(e.error!=='no-speech'&&e.error!=='aborted') showErr('Microfone: '+e.error);
+  };
+
+  r.onend=()=>{
+    if(phase==='recording'){
+      // Criar nova instância para evitar acúmulo de resultados antigos
+      setTimeout(()=>{
+        if(phase==='recording'){
+          const nr=createRec();
+          if(nr){ rec=nr; try{nr.start();}catch(_){} }
+        }
+      },200);
+    }
+  };
+
   return r;
 }
+
+function initRec(){ return createRec(); }
 
 function startRec(){
   clearErr();
@@ -404,6 +445,7 @@ function startRec(){
   rec=r;
   try{
     r.start();phase='recording';startTimer();animWave(true);
+    processedCount=0;
     document.getElementById('timer').className='rec';
     document.getElementById('rec-status').textContent='Gravando consulta...';
     document.getElementById('transcript-box').style.display='block';
@@ -465,13 +507,28 @@ Retorne SOMENTE um JSON válido (sem markdown, sem texto extra) com as chaves:
 subjetivo, objetivo, avaliacao, plano, observacoes`;
 
   try{
-    const res=await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-      {method:'POST',headers:{'Content-Type':'application/json'},
-       body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{temperature:0.2,maxOutputTokens:2048}})}
-    );
-    const data=await res.json();
-    if(data.error) throw new Error(data.error.message||'Erro Gemini');
+    // Tenta modelos em ordem até um funcionar
+    const models=[
+      'gemini-1.5-flash',
+      'gemini-1.5-flash-latest',
+      'gemini-1.0-pro',
+    ];
+
+    let data=null;
+    let lastErr='';
+    for(const model of models){
+      try{
+        const res=await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+          {method:'POST',headers:{'Content-Type':'application/json'},
+           body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{temperature:0.2,maxOutputTokens:2048}})}
+        );
+        const d=await res.json();
+        if(d.error){lastErr=d.error.message||'Erro';continue;}
+        data=d; break;
+      }catch(e){lastErr=e.message;continue;}
+    }
+    if(!data) throw new Error('Nenhum modelo disponível: '+lastErr);
 
     const raw=data.candidates?.[0]?.content?.parts?.[0]?.text||'';
     const soap=JSON.parse(raw.replace(/```json|```/g,'').trim());
@@ -705,7 +762,7 @@ ATENÇÃO: Revisar antes de inserir no prontuário oficial.`;
 //  RESET
 // ══════════════════════════════════════════════════════════════
 function resetApp(){
-  rec&&rec.stop();rec=null;finalText='';elapsed=0;phase='idle';currentSoap=null;stopTimer();animWave(false);
+  rec&&rec.stop();rec=null;finalText='';elapsed=0;phase='idle';currentSoap=null;processedCount=0;stopTimer();animWave(false);
   document.getElementById('timer').textContent='00:00';document.getElementById('timer').className='';
   document.getElementById('rec-status').textContent='Pronto para gravar';
   document.getElementById('rec-card').style.borderColor='#D8E2EC';
