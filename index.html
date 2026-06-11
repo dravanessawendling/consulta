@@ -377,41 +377,87 @@ function showErr(m){const e=document.getElementById('error-box');e.textContent='
 function clearErr(){document.getElementById('error-box').style.display='none';}
 
 // ══════════════════════════════════════════════════════════════
-//  SPEECH
+//  SPEECH — anti-duplicata mobile/desktop
+//  Solução definitiva: continuous=false + reinício manual.
+//  Cada sessão de recognition é uma instância nova e independente.
+//  O texto já confirmado fica em finalText e NUNCA é relido.
 // ══════════════════════════════════════════════════════════════
-function initRec(){
+
+function startNewSession(){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SR) return null;
   const r=new SR();
-  r.lang='pt-BR';r.continuous=true;r.interimResults=true;r.maxAlternatives=1;
+  // continuous=false é mais confiável no Android/iOS
+  // cada sessão dura ~60s e reiniciamos manualmente no onend
+  r.lang='pt-BR';
+  r.continuous=false;
+  r.interimResults=true;
+  r.maxAlternatives=1;
+
+  // Texto final JÁ confirmado desta sessão (para não repetir no onresult)
+  let sessionCommitted='';
+
   r.onresult=(e)=>{
     let interim='';
-    for(let i=e.resultIndex;i<e.results.length;i++){
+    let sessionNew='';
+    for(let i=0;i<e.results.length;i++){
       const t=e.results[i][0].transcript;
       if(e.results[i].isFinal){
-        if(i>=processedCount){
-          finalText+=(finalText?' ':'')+t;
-          processedCount=i+1;
-          document.getElementById('final-text').textContent=finalText;
-          document.getElementById('interim').textContent='';
-        }
-      } else { interim+=t; }
+        sessionNew+=(sessionNew?' ':'')+t.trim();
+      } else {
+        interim+=t;
+      }
     }
-    if(interim) document.getElementById('interim').textContent=' '+interim;
+
+    // Só adiciona ao global o que é realmente novo nesta sessão
+    if(sessionNew && sessionNew!==sessionCommitted){
+      // Pega só a parte nova (sufixo após o que já foi commitado)
+      let added='';
+      if(sessionCommitted==='' ){
+        added=sessionNew;
+      } else if(sessionNew.startsWith(sessionCommitted)){
+        added=sessionNew.slice(sessionCommitted.length).trim();
+      } else {
+        added=sessionNew; // fallback: sessão recomeçou do zero
+      }
+      if(added){
+        finalText+=(finalText?' ':'')+added;
+        sessionCommitted=sessionNew;
+        document.getElementById('final-text').textContent=finalText;
+      }
+    }
+    document.getElementById('interim').textContent=interim?' '+interim:'';
   };
-  r.onerror=(e)=>{if(e.error!=='no-speech'&&e.error!=='aborted')showErr('Microfone: '+e.error);};
-  r.onend=()=>{if(phase==='recording'){try{r.start();}catch(_){}}};
+
+  r.onerror=(e)=>{
+    if(e.error!=='no-speech'&&e.error!=='aborted') showErr('Microfone: '+e.error);
+  };
+
+  r.onend=()=>{
+    document.getElementById('interim').textContent='';
+    if(phase==='recording'){
+      // Pausa curta antes de reiniciar para o Android liberar o mic
+      setTimeout(()=>{
+        if(phase==='recording'){
+          const nr=startNewSession();
+          if(nr){rec=nr;try{nr.start();}catch(_){}}
+        }
+      },300);
+    }
+  };
+
   return r;
 }
 
 function startRec(){
   clearErr();
-  const r=initRec();
-  if(!r){showErr('Reconhecimento de voz não suportado. Use Chrome ou Edge.');return;}
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){showErr('Reconhecimento de voz não suportado. Use Chrome ou Edge.');return;}
+  const r=startNewSession();
+  if(!r){showErr('Erro ao iniciar reconhecimento.');return;}
   rec=r;
   try{
     r.start();phase='recording';startTimer();animWave(true);
-    processedCount=0;
     document.getElementById('timer').className='rec';
     document.getElementById('rec-status').textContent='Gravando consulta...';
     document.getElementById('transcript-box').style.display='block';
@@ -422,20 +468,25 @@ function startRec(){
     showBtns(['btn-pause','btn-generate']);setBadge('⏺ Gravando','#D94040');
   }catch(e){showErr('Não foi possível acessar o microfone.');}
 }
+
 function pauseRec(){
-  rec&&rec.stop();phase='paused';stopTimer();animWave(false);
+  phase='paused';
+  rec&&rec.stop();
+  stopTimer();animWave(false);
   document.getElementById('timer').className='';
   document.getElementById('rec-status').textContent='Pausado';
   document.getElementById('rec-card').style.borderColor='#D8E2EC';
   document.getElementById('interim').textContent='';
   showBtns(['btn-resume','btn-generate']);setBadge('⏸ Pausado','#E8900A');
 }
+
 function resumeRec(){
   phase='recording';startTimer();animWave(true);
   document.getElementById('timer').className='rec';
   document.getElementById('rec-status').textContent='Gravando consulta...';
   document.getElementById('rec-card').style.borderColor='rgba(217,64,64,.4)';
-  try{rec&&rec.start();}catch(_){}
+  const r=startNewSession();
+  if(r){rec=r;try{r.start();}catch(_){}}
   showBtns(['btn-pause','btn-generate']);setBadge('⏺ Gravando','#D94040');
 }
 
@@ -473,13 +524,27 @@ Retorne SOMENTE um JSON válido (sem markdown, sem texto extra) com as chaves:
 subjetivo, objetivo, avaliacao, plano, observacoes`;
 
   try{
-    const res=await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
-      {method:'POST',headers:{'Content-Type':'application/json'},
-       body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{temperature:0.2,maxOutputTokens:2048}})}
-    );
-    const data=await res.json();
-    if(data.error) throw new Error(data.error.message||'Erro Gemini');
+    // Modelos disponíveis no free tier, em ordem de preferência
+    const models=[
+      'gemini-2.0-flash-lite',
+      'gemini-1.5-flash-8b',
+      'gemini-1.5-flash',
+    ];
+    let data=null;
+    let lastErr='';
+    for(const model of models){
+      try{
+        const res=await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+          {method:'POST',headers:{'Content-Type':'application/json'},
+           body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{temperature:0.2,maxOutputTokens:2048}})}
+        );
+        const d=await res.json();
+        if(d.error){lastErr=d.error.message||'Erro';continue;}
+        data=d; break;
+      }catch(e){lastErr=e.message;continue;}
+    }
+    if(!data) throw new Error('Nenhum modelo disponível: '+lastErr);
 
     const raw=data.candidates?.[0]?.content?.parts?.[0]?.text||'';
     const soap=JSON.parse(raw.replace(/```json|```/g,'').trim());
