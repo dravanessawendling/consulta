@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>MedTranscribe</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Inter','Segoe UI',sans-serif;background:#F2F5F8;color:#0D2137;min-height:100vh}
+
+    /* Header */
+    #header{background:#0D2137;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;box-shadow:0 2px 12px rgba(0,0,0,.15)}
+    .logo{display:flex;align-items:center;gap:10px}
+    .logo-icon{width:36px;height:36px;border-radius:10px;background:#0E8C7A;display:flex;align-items:center;justify-content:center;font-size:18px}
+    .logo-text{font-weight:800;font-size:16px;color:#fff}
+    .logo-sub{font-size:11px;color:#A8BCCF;letter-spacing:.04em}
+    #badge{display:none;padding:3px 11px;border-radius:99px;font-size:12px;font-weight:600}
+    .hbtn{background:transparent;border:1px solid rgba(255,255,255,.2);border-radius:8px;color:#A8BCCF;font-size:12px;padding:5px 11px;cursor:pointer;margin-left:6px}
+    .hbtn:hover{border-color:rgba(255,255,255,.4);color:#fff}
+
+    /* Tabs */
+    #tabs{display:flex;gap:0;background:#fff;border-bottom:2px solid #D8E2EC;position:sticky;top:65px;z-index:90}
+    .tab{flex:1;padding:12px;text-align:center;font-weight:700;font-size:13px;color:#6B7F92;cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px;transition:all .2s}
+    .tab.active{color:#0E8C7A;border-bottom-color:#0E8C7A}
+    .tab-icon{font-size:15px;margin-right:5px}
+
+    /* Pages */
+    .page{display:none;max-width:660px;margin:0 auto;padding:20px 14px 60px}
+    .page.active{display:block}
+
+    /* API Key banner */
+    #api-banner{background:#fff;border:1.5px solid #D8E2EC;border-radius:14px;padding:18px 20px;margin-bottom:16px}
+    #api-banner.ok{background:#E8F7F5;border-color:rgba(14,140,122,.3)}
+    .banner-title{font-weight:700;font-size:14px;margin-bottom:10px}
+    .banner-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    #inp-apikey{flex:1;min-width:200px;padding:9px 12px;border:1.5px solid #D8E2EC;border-radius:9px;font-size:13px;font-family:monospace;outline:none;background:#F2F5F8;color:#0D2137}
+    #inp-apikey:focus{border-color:#0E8C7A}
+    #api-status{font-size:12px;margin-top:8px;color:#6B7F92}
+
+    /* Cards */
+    .card{background:#fff;border:1.5px solid #D8E2EC;border-radius:14px;padding:20px 22px;margin-bottom:16px}
+    .card-title{font-weight:700;font-size:14px;color:#0D2137;margin-bottom:14px}
+    .field-row{display:flex;gap:10px;flex-wrap:wrap}
+    .field{flex:1 1 160px}
+    .field label{display:block;font-size:11px;font-weight:700;color:#6B7F92;margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em}
+    .field input{width:100%;padding:8px 11px;border:1.5px solid #D8E2EC;border-radius:8px;font-size:13px;outline:none;background:#F2F5F8;color:#0D2137}
+    .field input:focus{border-color:#0E8C7A}
+
+    /* Timer */
+    #rec-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+    #timer{font-family:'Courier New',monospace;font-size:36px;font-weight:800;color:#0D2137;letter-spacing:.05em;line-height:1}
+    #timer.rec{color:#D94040}
+    #rec-status{font-size:12px;color:#6B7F92;margin-top:3px}
+    #waveform{display:flex;align-items:center;gap:2px;height:38px}
+    .wbar{width:3px;border-radius:3px;background:#D8E2EC;height:8px}
+    .wbar.on{background:#0E8C7A}
+    @keyframes w0{0%{height:6px}100%{height:26px}}
+    @keyframes w1{0%{height:6px}100%{height:18px}}
+    @keyframes w2{0%{height:6px}100%{height:30px}}
+    @keyframes w3{0%{height:6px}100%{height:14px}}
+    @keyframes w4{0%{height:6px}100%{height:22px}}
+
+    /* Buttons */
+    #btn-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+    .btn{display:inline-flex;align-items:center;gap:6px;padding:10px 20px;border-radius:9px;font-weight:700;font-size:13px;cursor:pointer;border:none;transition:opacity .15s,transform .1s}
+    .btn:active{transform:scale(.97)}
+    .btn:disabled{background:#A8BCCF!important;cursor:not-allowed}
+    .btn-red  {background:#D94040;color:#fff}
+    .btn-navy {background:#0D2137;color:#fff}
+    .btn-teal {background:#0E8C7A;color:#fff}
+    .btn-ghost{background:transparent;color:#0E8C7A;border:1.5px solid #0E8C7A!important}
+    .btn-sm   {padding:6px 14px;font-size:12px}
+    .btn-danger-sm{background:transparent;color:#D94040;border:1.5px solid #D94040!important;padding:6px 14px;font-size:12px}
+    #spinner{display:none;align-items:center;gap:9px;color:#0E8C7A;font-weight:600;font-size:13px}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .spin-svg{animation:spin .9s linear infinite}
+
+    /* Transcript */
+    #transcript-box{display:none}
+    #t-label{font-size:11px;font-weight:700;letter-spacing:.1em;color:#6B7F92;text-transform:uppercase;margin-bottom:8px}
+    #t-text{font-size:13px;line-height:1.8;max-height:200px;overflow-y:auto;color:#0D2137}
+    #interim{color:#A8BCCF;font-style:italic}
+
+    /* Error */
+    #error-box{display:none;background:#FDF0F0;border:1.5px solid rgba(217,64,64,.3);border-radius:11px;padding:11px 15px;margin-bottom:14px;font-size:13px;color:#D94040}
+
+    /* SOAP */
+    #soap-output{display:none}
+    #soap-header{background:#0D2137;border-radius:13px;padding:14px 18px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center}
+    .soap-title{font-weight:800;font-size:15px;color:#fff}
+    .soap-sub{font-size:11px;color:#A8BCCF;margin-top:2px}
+    .soap-card{border-radius:13px;padding:16px 18px;margin-bottom:12px;border-width:1.5px;border-style:solid}
+    .soap-letter{width:32px;height:32px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;font-family:Georgia,serif;font-weight:700;font-size:16px;color:#fff;flex-shrink:0}
+    .soap-label{font-weight:700;font-size:12px;letter-spacing:.07em;text-transform:uppercase}
+    .soap-body{font-size:13px;line-height:1.75;color:#0D2137;white-space:pre-wrap;margin-top:9px}
+    details{background:#fff;border-radius:11px;border:1.5px solid #D8E2EC;padding:12px 16px;margin-bottom:12px;cursor:pointer}
+    details summary{font-weight:700;font-size:12px;color:#6B7F92;user-select:none}
+    .full-t-body{margin-top:10px;font-size:12px;line-height:1.8;color:#0D2137}
+    #disclaimer{background:#FEF6E7;border:1.5px solid rgba(232,144,10,.3);border-radius:11px;padding:11px 15px;font-size:12px;color:#E8900A;line-height:1.6}
+
+    /* ── HISTÓRICO ── */
+    #hist-search-row{display:flex;gap:8px;margin-bottom:16px}
+    #hist-search{flex:1;padding:9px 13px;border:1.5px solid #D8E2EC;border-radius:9px;font-size:13px;outline:none;background:#fff;color:#0D2137}
+    #hist-search:focus{border-color:#0E8C7A}
+    #hist-empty{text-align:center;padding:40px 20px;color:#A8BCCF;font-size:14px}
+    #hist-count{font-size:12px;color:#6B7F92;margin-bottom:12px}
+
+    .hist-card{background:#fff;border:1.5px solid #D8E2EC;border-radius:13px;padding:16px 18px;margin-bottom:12px;cursor:pointer;transition:border-color .2s,box-shadow .2s}
+    .hist-card:hover{border-color:#0E8C7A;box-shadow:0 2px 12px rgba(14,140,122,.1)}
+    .hist-card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:8px}
+    .hist-name{font-weight:700;font-size:14px;color:#0D2137}
+    .hist-date{font-size:11px;color:#6B7F92;white-space:nowrap}
+    .hist-meta{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+    .hist-tag{display:inline-block;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:600;background:#E8F7F5;color:#0E8C7A}
+    .hist-preview{font-size:12px;color:#6B7F92;line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+    .hist-actions{display:flex;gap:6px;margin-top:10px;padding-top:10px;border-top:1px solid #F2F5F8}
+
+    /* Modal */
+    #modal-overlay{display:none;position:fixed;inset:0;background:rgba(13,33,55,.6);z-index:200;overflow-y:auto;padding:20px 14px}
+    #modal{background:#fff;border-radius:18px;max-width:660px;margin:0 auto;padding:24px;position:relative}
+    #modal-close{position:absolute;top:16px;right:16px;background:#F2F5F8;border:none;border-radius:8px;width:32px;height:32px;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+    #modal-title{font-weight:800;font-size:17px;color:#0D2137;margin-bottom:4px;padding-right:40px}
+    #modal-meta{font-size:12px;color:#6B7F92;margin-bottom:18px}
+
+    /* How to */
+    .how-step{display:flex;gap:10px;margin-bottom:10px;align-items:flex-start}
+    .how-icon{font-size:17px;flex-shrink:0;line-height:1.5}
+    .how-text{font-size:13px;color:#6B7F92;line-height:1.6}
+    #tip{margin-top:14px;padding:11px 14px;background:#E8F7F5;border-radius:9px;font-size:12px;color:#0E8C7A;line-height:1.6}
+  </style>
+</head>
+<body>
+
+<!-- Header -->
+<div id="header">
+  <div class="logo">
+    <div class="logo-icon">🩺</div>
+    <div>
+      <div class="logo-text">MedTranscribe</div>
+      <div class="logo-sub">GEMINI 2.0 FLASH · LOCAL</div>
+    </div>
+  </div>
+  <div style="display:flex;align-items:center;gap:4px">
+    <span id="badge"></span>
+    <button class="hbtn" onclick="showTab('consulta')">🎙</button>
+    <button class="hbtn" onclick="showTab('historico')">📋 Histórico</button>
+    <button class="hbtn" onclick="toggleApiPanel()">⚙ API</button>
+  </div>
+</div>
+
+<!-- Tabs -->
+<div id="tabs">
+  <div class="tab active" id="tab-consulta"  onclick="showTab('consulta')"><span class="tab-icon">🎙</span>Nova Consulta</div>
+  <div class="tab"        id="tab-historico" onclick="showTab('historico')"><span class="tab-icon">📋</span>Histórico <span id="hist-badge" style="font-size:11px;background:#E8F7F5;color:#0E8C7A;padding:1px 7px;border-radius:99px;margin-left:4px"></span></div>
+</div>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!-- PAGE: CONSULTA                                  -->
+<!-- ═══════════════════════════════════════════════ -->
+<div class="page active" id="page-consulta">
+
+  <div id="api-banner">
+    <div class="banner-title" id="banner-title">🔑 Configure sua chave Gemini (gratuita)</div>
+    <div class="banner-row">
+      <input type="password" id="inp-apikey" placeholder="Cole sua chave: AIza..."/>
+      <button class="btn btn-teal btn-sm" onclick="saveKey()">Salvar</button>
+      <button class="btn btn-ghost btn-sm" onclick="toggleShow()">👁</button>
+    </div>
+    <div id="api-status">Obtenha em <a href="https://aistudio.google.com" target="_blank" style="color:#0E8C7A;font-weight:600">aistudio.google.com</a> → Get API Key → Create API Key</div>
+  </div>
+
+  <div class="card" id="patient-card">
+    <div class="card-title">Dados da Consulta <span style="font-weight:400;color:#6B7F92;font-size:12px">(opcional)</span></div>
+    <div class="field-row">
+      <div class="field"><label>Paciente</label><input type="text" id="inp-name" placeholder="Nome completo"/></div>
+      <div class="field"><label>Idade</label><input type="text" id="inp-age" placeholder="Ex.: 45 anos"/></div>
+      <div class="field"><label>Médico(a)</label><input type="text" id="inp-doctor" placeholder="Ex.: Dr. Ana Souza"/></div>
+    </div>
+  </div>
+
+  <div class="card" id="rec-card">
+    <div id="rec-top">
+      <div>
+        <div id="timer">00:00</div>
+        <div id="rec-status">Pronto para gravar</div>
+      </div>
+      <div id="waveform"></div>
+    </div>
+    <div id="btn-row">
+      <button class="btn btn-red"   id="btn-start"    onclick="startRec()">⏺ Iniciar Consulta</button>
+      <button class="btn btn-ghost" id="btn-pause"    style="display:none" onclick="pauseRec()">⏸ Pausar</button>
+      <button class="btn btn-red"   id="btn-resume"   style="display:none" onclick="resumeRec()">⏺ Retomar</button>
+      <button class="btn btn-navy"  id="btn-generate" style="display:none" onclick="generate()">⚕ Gerar Prontuário</button>
+      <button class="btn btn-teal"  id="btn-copy"     style="display:none" onclick="copyDoc(null)">📋 Copiar</button>
+      <button class="btn btn-ghost" id="btn-new"      style="display:none" onclick="resetApp()">↺ Nova Consulta</button>
+      <div id="spinner">
+        <svg class="spin-svg" width="18" height="18" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="10" stroke="#0E8C7A" stroke-width="3" fill="none" stroke-dasharray="50" stroke-dashoffset="15"/>
+        </svg>
+        Gerando com Gemini...
+      </div>
+    </div>
+  </div>
+
+  <div id="error-box"></div>
+
+  <div class="card" id="transcript-box">
+    <div id="t-label">Transcrição ao vivo</div>
+    <div id="t-text"><span id="final-text"></span><span id="interim"></span></div>
+  </div>
+
+  <div id="soap-output">
+    <div id="soap-header">
+      <div><div class="soap-title">Prontuário SOAP</div><div class="soap-sub" id="soap-meta"></div></div>
+      <button class="btn btn-ghost btn-sm" onclick="copyDoc(null)" id="btn-copy2" style="border-color:rgba(255,255,255,.25)!important;color:#fff">📋 Copiar</button>
+    </div>
+    <div class="soap-card" style="background:#EEF4FB;border-color:rgba(27,108,168,.2)">
+      <div style="display:flex;align-items:center;gap:9px"><div class="soap-letter" style="background:#1B6CA8">S</div><span class="soap-label" style="color:#1B6CA8">Subjetivo — Queixas e Anamnese</span></div>
+      <div class="soap-body" id="soap-s"></div>
+    </div>
+    <div class="soap-card" style="background:#E8F7F5;border-color:rgba(10,122,107,.2)">
+      <div style="display:flex;align-items:center;gap:9px"><div class="soap-letter" style="background:#0A7A6B">O</div><span class="soap-label" style="color:#0A7A6B">Objetivo — Exame Físico e Dados Clínicos</span></div>
+      <div class="soap-body" id="soap-o"></div>
+    </div>
+    <div class="soap-card" style="background:#F5EDFB;border-color:rgba(122,59,158,.2)">
+      <div style="display:flex;align-items:center;gap:9px"><div class="soap-letter" style="background:#7A3B9E">A</div><span class="soap-label" style="color:#7A3B9E">Avaliação — Diagnóstico e Hipóteses</span></div>
+      <div class="soap-body" id="soap-a"></div>
+    </div>
+    <div class="soap-card" style="background:#FEF6E7;border-color:rgba(184,90,0,.2)">
+      <div style="display:flex;align-items:center;gap:9px"><div class="soap-letter" style="background:#B85A00">P</div><span class="soap-label" style="color:#B85A00">Plano — Condutas e Prescrições</span></div>
+      <div class="soap-body" id="soap-p"></div>
+    </div>
+    <div class="soap-card" id="soap-obs-card" style="background:#F2F5F8;border-color:rgba(107,127,146,.2);display:none">
+      <div style="display:flex;align-items:center;gap:9px"><div class="soap-letter" style="background:#6B7F92">+</div><span class="soap-label" style="color:#6B7F92">Observações</span></div>
+      <div class="soap-body" id="soap-obs"></div>
+    </div>
+    <details><summary id="det-label">Ver transcrição completa</summary><div class="full-t-body" id="full-t"></div></details>
+    <div id="disclaimer">⚠ <strong>Importante:</strong> Prontuário gerado por IA. Revise antes de inserir no sistema oficial. O médico é o único responsável pela documentação clínica.</div>
+  </div>
+
+  <div class="card" id="how-to">
+    <div class="card-title">Como usar</div>
+    <div class="how-step"><span class="how-icon">🔑</span><span class="how-text">Cole sua chave Gemini gratuita acima e clique <strong>Salvar</strong></span></div>
+    <div class="how-step"><span class="how-icon">🎙</span><span class="how-text">Preencha os dados e clique em <strong>Iniciar Consulta</strong></span></div>
+    <div class="how-step"><span class="how-icon">👂</span><span class="how-text">O app transcreve tudo em tempo real durante o atendimento</span></div>
+    <div class="how-step"><span class="how-icon">⚕</span><span class="how-text">Clique <strong>Gerar Prontuário</strong> — a IA estrutura no formato SOAP</span></div>
+    <div class="how-step"><span class="how-icon">📋</span><span class="how-text">Copie e cole no seu sistema. O prontuário é salvo automaticamente no histórico</span></div>
+    <div id="tip">📋 <strong>Histórico:</strong> As últimas 7 consultas ficam salvas no navegador. Acesse pela aba Histórico para revisar, copiar ou excluir.</div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!-- PAGE: HISTÓRICO                                 -->
+<!-- ═══════════════════════════════════════════════ -->
+<div class="page" id="page-historico">
+  <div style="display:flex;gap:8px;margin-bottom:16px;align-items:center">
+    <input type="text" id="hist-search" placeholder="🔍  Buscar por paciente, médico ou diagnóstico..." oninput="renderHist()"/>
+    <button class="btn btn-danger-sm btn-sm" onclick="clearAllHist()">🗑 Limpar tudo</button>
+  </div>
+  <div id="hist-count"></div>
+  <div id="hist-list"></div>
+  <div id="hist-empty" style="display:none">
+    <div style="font-size:40px;margin-bottom:12px">📋</div>
+    <div>Nenhuma consulta no histórico ainda.</div>
+    <div style="margin-top:6px;font-size:12px">As consultas geradas aparecem aqui automaticamente.</div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!-- MODAL: ver prontuário completo                  -->
+<!-- ═══════════════════════════════════════════════ -->
+<div id="modal-overlay" onclick="closeModal(event)">
+  <div id="modal">
+    <button id="modal-close" onclick="closeModalDirect()">✕</button>
+    <div id="modal-title"></div>
+    <div id="modal-meta"></div>
+    <div id="modal-body"></div>
+    <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
+      <button class="btn btn-teal btn-sm" id="modal-copy-btn" onclick="copyDoc('modal')">📋 Copiar Prontuário</button>
+      <button class="btn btn-ghost btn-sm" onclick="closeModalDirect()">Fechar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════════════════════════
+let phase='idle', elapsed=0, timerInt=null, finalText='', rec=null;
+let currentSoap=null; // soap object of current/modal session
+const MAX_HIST = 7;
+const HIST_KEY = 'med_history';
+
+// ══════════════════════════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════════════════════════
+window.addEventListener('DOMContentLoaded', () => {
+  buildWaveform();
+  const saved = localStorage.getItem('gmk');
+  if (saved) { document.getElementById('inp-apikey').value=saved; setKeyOk(saved); }
+  updateHistBadge();
+});
+
+// ══════════════════════════════════════════════════════════════
+//  TABS
+// ══════════════════════════════════════════════════════════════
+function showTab(tab) {
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('page-'+tab).classList.add('active');
+  document.getElementById('tab-'+tab).classList.add('active');
+  if (tab==='historico') renderHist();
+}
+
+// ══════════════════════════════════════════════════════════════
+//  API KEY
+// ══════════════════════════════════════════════════════════════
+function saveKey() {
+  const k=document.getElementById('inp-apikey').value.trim();
+  if(!k) return;
+  localStorage.setItem('gmk',k); setKeyOk(k);
+}
+function setKeyOk(k) {
+  const b=document.getElementById('api-banner');
+  b.className='ok';
+  document.getElementById('banner-title').textContent='✅ Chave configurada — '+k.slice(0,8)+'••••••••';
+  document.getElementById('api-status').textContent='Chave salva no navegador. Clique ⚙ API para alterar.';
+  document.getElementById('btn-start').disabled=false;
+}
+function toggleApiPanel() {
+  const b=document.getElementById('api-banner');
+  b.style.display=b.style.display==='none'?'block':'none';
+}
+function toggleShow() {
+  const i=document.getElementById('inp-apikey');
+  i.type=i.type==='password'?'text':'password';
+}
+
+// ══════════════════════════════════════════════════════════════
+//  WAVEFORM
+// ══════════════════════════════════════════════════════════════
+function buildWaveform() {
+  const wf=document.getElementById('waveform');
+  for(let i=0;i<26;i++){const d=document.createElement('div');d.className='wbar';d.id='wb'+i;wf.appendChild(d);}
+}
+function animWave(on) {
+  for(let i=0;i<26;i++){
+    const b=document.getElementById('wb'+i);
+    if(on){b.className='wbar on';b.style.animation=`w${i%5} ${0.6+(i%5)*0.12}s ease-in-out infinite alternate`;b.style.animationDelay=`${(i*0.04)%0.6}s`;}
+    else{b.className='wbar';b.style.animation='none';b.style.height='8px';}
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  TIMER
+// ══════════════════════════════════════════════════════════════
+function fmt(s){return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');}
+function startTimer(){timerInt=setInterval(()=>{elapsed++;document.getElementById('timer').textContent=fmt(elapsed);},1000);}
+function stopTimer(){clearInterval(timerInt);}
+
+// ══════════════════════════════════════════════════════════════
+//  UI HELPERS
+// ══════════════════════════════════════════════════════════════
+function setBadge(txt,col){
+  const b=document.getElementById('badge');
+  if(!txt){b.style.display='none';return;}
+  b.textContent=txt;b.style.display='inline-block';
+  b.style.background=col+'33';b.style.color=col;b.style.border='1px solid '+col+'55';
+}
+function showBtns(ids){
+  ['btn-start','btn-pause','btn-resume','btn-generate','btn-copy','btn-new','spinner']
+    .forEach(id=>{document.getElementById(id).style.display='none';});
+  ids.forEach(id=>{const el=document.getElementById(id);if(el)el.style.display=id==='spinner'?'flex':'inline-flex';});
+}
+function showErr(m){const e=document.getElementById('error-box');e.textContent='⚠ '+m;e.style.display='block';}
+function clearErr(){document.getElementById('error-box').style.display='none';}
+
+// ══════════════════════════════════════════════════════════════
+//  SPEECH
+// ══════════════════════════════════════════════════════════════
+function initRec(){
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR) return null;
+  const r=new SR();
+  r.lang='pt-BR';r.continuous=true;r.interimResults=true;r.maxAlternatives=1;
+  r.onresult=(e)=>{
+    let interim='';
+    for(let i=e.resultIndex;i<e.results.length;i++){
+      const t=e.results[i][0].transcript;
+      if(e.results[i].isFinal){finalText+=(finalText?' ':'')+t;document.getElementById('final-text').textContent=finalText;document.getElementById('interim').textContent='';}
+      else{interim+=t;}
+    }
+    if(interim) document.getElementById('interim').textContent=' '+interim;
+  };
+  r.onerror=(e)=>{if(e.error!=='no-speech'&&e.error!=='aborted')showErr('Microfone: '+e.error);};
+  r.onend=()=>{if(phase==='recording'){try{r.start();}catch(_){}}};
+  return r;
+}
+
+function startRec(){
+  clearErr();
+  const r=initRec();
+  if(!r){showErr('Reconhecimento de voz não suportado. Use Chrome ou Edge.');return;}
+  rec=r;
+  try{
+    r.start();phase='recording';startTimer();animWave(true);
+    document.getElementById('timer').className='rec';
+    document.getElementById('rec-status').textContent='Gravando consulta...';
+    document.getElementById('transcript-box').style.display='block';
+    document.getElementById('patient-card').style.display='none';
+    document.getElementById('how-to').style.display='none';
+    document.getElementById('api-banner').style.display='none';
+    document.getElementById('rec-card').style.borderColor='rgba(217,64,64,.4)';
+    showBtns(['btn-pause','btn-generate']);setBadge('⏺ Gravando','#D94040');
+  }catch(e){showErr('Não foi possível acessar o microfone.');}
+}
+function pauseRec(){
+  rec&&rec.stop();phase='paused';stopTimer();animWave(false);
+  document.getElementById('timer').className='';
+  document.getElementById('rec-status').textContent='Pausado';
+  document.getElementById('rec-card').style.borderColor='#D8E2EC';
+  document.getElementById('interim').textContent='';
+  showBtns(['btn-resume','btn-generate']);setBadge('⏸ Pausado','#E8900A');
+}
+function resumeRec(){
+  phase='recording';startTimer();animWave(true);
+  document.getElementById('timer').className='rec';
+  document.getElementById('rec-status').textContent='Gravando consulta...';
+  document.getElementById('rec-card').style.borderColor='rgba(217,64,64,.4)';
+  try{rec&&rec.start();}catch(_){}
+  showBtns(['btn-pause','btn-generate']);setBadge('⏺ Gravando','#D94040');
+}
+
+// ══════════════════════════════════════════════════════════════
+//  GENERATE SOAP
+// ══════════════════════════════════════════════════════════════
+async function generate(){
+  rec&&rec.stop();
+  document.getElementById('interim').textContent='';
+  phase='processing';stopTimer();animWave(false);
+  document.getElementById('timer').className='';
+  document.getElementById('rec-status').textContent='Gerando prontuário...';
+  document.getElementById('rec-card').style.borderColor='#D8E2EC';
+  showBtns(['spinner']);setBadge('⚙ Processando','#0E8C7A');clearErr();
+
+  if(!finalText.trim()){showErr('Nenhuma transcrição capturada.');phase='paused';showBtns(['btn-resume','btn-generate']);return;}
+
+  const apiKey=localStorage.getItem('gmk');
+  if(!apiKey){showErr('Configure sua chave Gemini.');phase='paused';showBtns(['btn-resume','btn-generate']);return;}
+
+  const name  =document.getElementById('inp-name').value  ||'Não informado';
+  const age   =document.getElementById('inp-age').value   ||'Não informada';
+  const doctor=document.getElementById('inp-doctor').value||'Não informado';
+  const now   =new Date().toLocaleDateString('pt-BR',{day:'2-digit',month:'long',year:'numeric'});
+
+  const prompt=`Você é um assistente médico especializado em documentação clínica.
+Analise a transcrição abaixo e estruture um prontuário completo no formato SOAP (normas CFM/Brasil).
+
+DADOS: Paciente: ${name} | Idade: ${age} | Médico(a): ${doctor} | Data: ${now} | Duração: ${fmt(elapsed)}
+
+TRANSCRIÇÃO DA CONSULTA:
+${finalText}
+
+Retorne SOMENTE um JSON válido (sem markdown, sem texto extra) com as chaves:
+subjetivo, objetivo, avaliacao, plano, observacoes`;
+
+  try{
+    const res=await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+      {method:'POST',headers:{'Content-Type':'application/json'},
+       body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{temperature:0.2,maxOutputTokens:2048}})}
+    );
+    const data=await res.json();
+    if(data.error) throw new Error(data.error.message||'Erro Gemini');
+
+    const raw=data.candidates?.[0]?.content?.parts?.[0]?.text||'';
+    const soap=JSON.parse(raw.replace(/```json|```/g,'').trim());
+    currentSoap=soap;
+
+    // Render
+    document.getElementById('soap-s').textContent=soap.subjetivo||'—';
+    document.getElementById('soap-o').textContent=soap.objetivo ||'—';
+    document.getElementById('soap-a').textContent=soap.avaliacao||'—';
+    document.getElementById('soap-p').textContent=soap.plano    ||'—';
+    if(soap.observacoes){document.getElementById('soap-obs').textContent=soap.observacoes;document.getElementById('soap-obs-card').style.display='block';}
+    document.getElementById('det-label').textContent=`Ver transcrição completa (${finalText.split(' ').length} palavras)`;
+    document.getElementById('full-t').textContent=finalText;
+    document.getElementById('soap-meta').textContent=`${name!=='Não informado'?name:'Paciente'} · ${new Date().toLocaleDateString('pt-BR')} · ${fmt(elapsed)}`;
+    document.getElementById('transcript-box').style.display='none';
+    document.getElementById('soap-output').style.display='block';
+    phase='done';
+    document.getElementById('rec-status').textContent='Prontuário gerado';
+    showBtns(['btn-copy','btn-new']);setBadge('✓ Concluído','#0E8C7A');
+
+    // ── Salvar no histórico ──
+    saveToHistory({
+      id: Date.now(),
+      date: new Date().toISOString(),
+      duration: fmt(elapsed),
+      name, age, doctor,
+      soap,
+      transcript: finalText,
+    });
+
+  }catch(e){
+    showErr('Erro: '+e.message);
+    phase='paused';showBtns(['btn-resume','btn-generate']);setBadge('⏸ Pausado','#E8900A');
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  HISTORY
+// ══════════════════════════════════════════════════════════════
+function getHistory(){
+  try{return JSON.parse(localStorage.getItem(HIST_KEY)||'[]');}catch{return[];}
+}
+function saveToHistory(entry){
+  let hist=getHistory();
+  hist.unshift(entry);           // mais recente primeiro
+  if(hist.length>MAX_HIST) hist=hist.slice(0,MAX_HIST);
+  localStorage.setItem(HIST_KEY,JSON.stringify(hist));
+  updateHistBadge();
+}
+function updateHistBadge(){
+  const n=getHistory().length;
+  const el=document.getElementById('hist-badge');
+  if(el) el.textContent=n>0?n:'';
+}
+function deleteFromHistory(id){
+  let hist=getHistory().filter(h=>h.id!==id);
+  localStorage.setItem(HIST_KEY,JSON.stringify(hist));
+  updateHistBadge();
+  renderHist();
+}
+function clearAllHist(){
+  if(!confirm('Apagar todo o histórico de consultas?')) return;
+  localStorage.removeItem(HIST_KEY);
+  updateHistBadge();
+  renderHist();
+}
+
+function renderHist(){
+  const q=(document.getElementById('hist-search').value||'').toLowerCase();
+  let hist=getHistory();
+  if(q) hist=hist.filter(h=>
+    (h.name||'').toLowerCase().includes(q)||
+    (h.doctor||'').toLowerCase().includes(q)||
+    (h.soap?.avaliacao||'').toLowerCase().includes(q)||
+    (h.soap?.plano||'').toLowerCase().includes(q)
+  );
+
+  const list=document.getElementById('hist-list');
+  const empty=document.getElementById('hist-empty');
+  const count=document.getElementById('hist-count');
+
+  if(hist.length===0){
+    list.innerHTML=''; empty.style.display='block';
+    count.textContent='';
+    return;
+  }
+  empty.style.display='none';
+  const total=getHistory().length;
+  count.textContent=q?`${hist.length} resultado(s) para "${q}"`:`${total} de ${MAX_HIST} consultas salvas`;
+
+  list.innerHTML=hist.map(h=>{
+    const d=new Date(h.date);
+    const dateStr=d.toLocaleDateString('pt-BR')+' '+d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+    const preview=(h.soap?.subjetivo||'').slice(0,120)+(h.soap?.subjetivo?.length>120?'…':'');
+    return `
+    <div class="hist-card" onclick="openModal(${h.id})">
+      <div class="hist-card-top">
+        <div class="hist-name">${h.name!=='Não informado'?h.name:'Paciente não identificado'}</div>
+        <div class="hist-date">${dateStr}</div>
+      </div>
+      <div class="hist-meta">
+        ${h.age&&h.age!=='Não informada'?`<span class="hist-tag">👤 ${h.age}</span>`:''}
+        ${h.doctor&&h.doctor!=='Não informado'?`<span class="hist-tag" style="background:#EEF4FB;color:#1B6CA8">🩺 ${h.doctor}</span>`:''}
+        <span class="hist-tag" style="background:#FEF6E7;color:#B85A00">⏱ ${h.duration}</span>
+      </div>
+      <div class="hist-preview">${preview||'—'}</div>
+      <div class="hist-actions" onclick="event.stopPropagation()">
+        <button class="btn btn-teal btn-sm" onclick="openModal(${h.id})">👁 Ver Prontuário</button>
+        <button class="btn btn-ghost btn-sm" onclick="copyHistEntry(${h.id})">📋 Copiar</button>
+        <button class="btn btn-danger-sm" onclick="deleteFromHistory(${h.id})">🗑 Excluir</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ══════════════════════════════════════════════════════════════
+//  MODAL
+// ══════════════════════════════════════════════════════════════
+let modalEntry=null;
+
+function openModal(id){
+  const hist=getHistory();
+  const entry=hist.find(h=>h.id===id);
+  if(!entry) return;
+  modalEntry=entry;
+
+  const d=new Date(entry.date);
+  const dateStr=d.toLocaleDateString('pt-BR')+' '+d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+  document.getElementById('modal-title').textContent=entry.name!=='Não informado'?entry.name:'Paciente não identificado';
+  document.getElementById('modal-meta').textContent=`${dateStr} · ${entry.doctor!=='Não informado'?entry.doctor:''} · Duração: ${entry.duration}`;
+
+  const s=entry.soap;
+  document.getElementById('modal-body').innerHTML=`
+    ${soapBlock('S','Subjetivo — Queixas e Anamnese','#EEF4FB','rgba(27,108,168,.2)','#1B6CA8','#1B6CA8',s.subjetivo)}
+    ${soapBlock('O','Objetivo — Exame Físico','#E8F7F5','rgba(10,122,107,.2)','#0A7A6B','#0A7A6B',s.objetivo)}
+    ${soapBlock('A','Avaliação — Diagnóstico','#F5EDFB','rgba(122,59,158,.2)','#7A3B9E','#7A3B9E',s.avaliacao)}
+    ${soapBlock('P','Plano — Condutas e Prescrições','#FEF6E7','rgba(184,90,0,.2)','#B85A00','#B85A00',s.plano)}
+    ${s.observacoes?soapBlock('+','Observações','#F2F5F8','rgba(107,127,146,.2)','#6B7F92','#6B7F92',s.observacoes):''}
+    <details style="background:#fff;border-radius:11px;border:1.5px solid #D8E2EC;padding:12px 16px;margin-bottom:12px;cursor:pointer">
+      <summary style="font-weight:700;font-size:12px;color:#6B7F92;user-select:none">Ver transcrição (${entry.transcript.split(' ').length} palavras)</summary>
+      <div style="margin-top:10px;font-size:12px;line-height:1.8;color:#0D2137">${entry.transcript}</div>
+    </details>`;
+
+  document.getElementById('modal-overlay').style.display='block';
+  document.body.style.overflow='hidden';
+}
+
+function soapBlock(letter,label,bg,border,letterBg,labelColor,content){
+  return `<div class="soap-card" style="background:${bg};border-color:${border}">
+    <div style="display:flex;align-items:center;gap:9px">
+      <div class="soap-letter" style="background:${letterBg}">${letter}</div>
+      <span class="soap-label" style="color:${labelColor}">${label}</span>
+    </div>
+    <div class="soap-body">${content||'—'}</div>
+  </div>`;
+}
+
+function closeModal(e){if(e.target===document.getElementById('modal-overlay'))closeModalDirect();}
+function closeModalDirect(){
+  document.getElementById('modal-overlay').style.display='none';
+  document.body.style.overflow='';
+  modalEntry=null;
+}
+
+function copyHistEntry(id){
+  const hist=getHistory();
+  const entry=hist.find(h=>h.id===id);
+  if(!entry) return;
+  modalEntry=entry;
+  copyDoc('hist');
+}
+
+// ══════════════════════════════════════════════════════════════
+//  COPY
+// ══════════════════════════════════════════════════════════════
+function copyDoc(source){
+  let name,age,doctor,duration,soap;
+  if(source==='modal'||source==='hist'){
+    const e=modalEntry;
+    if(!e) return;
+    name=e.name;age=e.age;doctor=e.doctor;duration=e.duration;soap=e.soap;
+  } else {
+    name  =document.getElementById('inp-name').value  ||'–';
+    age   =document.getElementById('inp-age').value   ||'–';
+    doctor=document.getElementById('inp-doctor').value||'–';
+    duration=fmt(elapsed);
+    soap=currentSoap;
+  }
+  if(!soap) return;
+  const txt=`PRONTUÁRIO MÉDICO — ${new Date().toLocaleDateString('pt-BR')}
+Paciente: ${name} | Idade: ${age} | Médico(a): ${doctor} | Duração: ${duration}
+
+═══════════════════════════════
+S — SUBJETIVO
+═══════════════════════════════
+${soap.subjetivo||'—'}
+
+═══════════════════════════════
+O — OBJETIVO
+═══════════════════════════════
+${soap.objetivo||'—'}
+
+═══════════════════════════════
+A — AVALIAÇÃO
+═══════════════════════════════
+${soap.avaliacao||'—'}
+
+═══════════════════════════════
+P — PLANO
+═══════════════════════════════
+${soap.plano||'—'}
+${soap.observacoes?'\n═══════════════════════════════\nOBSERVAÇÕES\n═══════════════════════════════\n'+soap.observacoes:''}
+
+— MedTranscribe + Gemini 2.0 Flash
+ATENÇÃO: Revisar antes de inserir no prontuário oficial.`;
+
+  navigator.clipboard.writeText(txt).then(()=>{
+    if(source==='modal'){
+      const b=document.getElementById('modal-copy-btn');
+      b.textContent='✓ Copiado!';setTimeout(()=>{b.innerHTML='📋 Copiar Prontuário';},2000);
+    } else {
+      ['btn-copy','btn-copy2'].forEach(id=>{
+        const el=document.getElementById(id);
+        if(el){el.textContent='✓ Copiado!';setTimeout(()=>{el.innerHTML=id==='btn-copy'?'📋 Copiar':'📋 Copiar';},2000);}
+      });
+    }
+  });
+}
+
+// ══════════════════════════════════════════════════════════════
+//  RESET
+// ══════════════════════════════════════════════════════════════
+function resetApp(){
+  rec&&rec.stop();rec=null;finalText='';elapsed=0;phase='idle';currentSoap=null;stopTimer();animWave(false);
+  document.getElementById('timer').textContent='00:00';document.getElementById('timer').className='';
+  document.getElementById('rec-status').textContent='Pronto para gravar';
+  document.getElementById('rec-card').style.borderColor='#D8E2EC';
+  document.getElementById('final-text').textContent='';document.getElementById('interim').textContent='';
+  document.getElementById('transcript-box').style.display='none';
+  document.getElementById('soap-output').style.display='none';
+  document.getElementById('soap-obs-card').style.display='none';
+  document.getElementById('patient-card').style.display='block';
+  document.getElementById('how-to').style.display='block';
+  document.getElementById('api-banner').style.display='block';
+  clearErr();showBtns(['btn-start']);setBadge('','');
+}
+</script>
+</body>
+</html>
