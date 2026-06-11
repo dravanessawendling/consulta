@@ -137,7 +137,7 @@
     <div class="logo-icon">🩺</div>
     <div>
       <div class="logo-text">MedTranscribe</div>
-      <div class="logo-sub">GEMINI 2.0 FLASH · LOCAL</div>
+      <div class="logo-sub">GEMINI 1.5 FLASH · LOCAL</div>
     </div>
   </div>
   <div style="display:flex;align-items:center;gap:4px">
@@ -245,7 +245,7 @@
     <div class="how-step"><span class="how-icon">👂</span><span class="how-text">O app transcreve tudo em tempo real durante o atendimento</span></div>
     <div class="how-step"><span class="how-icon">⚕</span><span class="how-text">Clique <strong>Gerar Prontuário</strong> — a IA estrutura no formato SOAP</span></div>
     <div class="how-step"><span class="how-icon">📋</span><span class="how-text">Copie e cole no seu sistema. O prontuário é salvo automaticamente no histórico</span></div>
-    <div id="tip">📋 <strong>Histórico:</strong> As últimas 7 consultas ficam salvas no navegador. Acesse pela aba Histórico para revisar, copiar ou excluir.</div>
+    <div id="tip">✦ <strong>Gemini 1.5 Flash gratuito:</strong> até 1.500 requisições/dia · Compatível com contas novas · Use Chrome ou Edge</div>
   </div>
 </div>
 
@@ -474,7 +474,7 @@ subjetivo, objetivo, avaliacao, plano, observacoes`;
 
   try{
     const res=await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
       {method:'POST',headers:{'Content-Type':'application/json'},
        body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{temperature:0.2,maxOutputTokens:2048}})}
     );
