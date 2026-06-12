@@ -377,72 +377,104 @@ function showErr(m){const e=document.getElementById('error-box');e.textContent='
 function clearErr(){document.getElementById('error-box').style.display='none';}
 
 // ══════════════════════════════════════════════════════════════
-//  SPEECH — anti-duplicata mobile/desktop
-//  Solução definitiva: continuous=false + reinício manual.
-//  Cada sessão de recognition é uma instância nova e independente.
-//  O texto já confirmado fica em finalText e NUNCA é relido.
+//  SPEECH — solução definitiva anti-duplicata
+//
+//  Estratégia: não usar continuous=true (causa duplicatas no Android).
+//  Cada sessão é curta (termina sozinha), reiniciamos manualmente.
+//  Anti-duplicata por CONTEÚDO: guardamos hash de cada frase final
+//  já adicionada. Mesmo que o browser reenvie, ignoramos se já existe.
 // ══════════════════════════════════════════════════════════════
 
+// Set com todas as frases já adicionadas (normalized lowercase, sem pontuação)
+const addedPhrases = new Set();
+
+function normalizePhrase(t){
+  return t.toLowerCase().replace(/[^a-záàâãéêíóôõúüç\s]/gi,'').replace(/\s+/g,' ').trim();
+}
+
+// Divide texto em frases curtas para comparação granular
+function splitPhrases(t){
+  return t.split(/[.!?,;]+/).map(s=>s.trim()).filter(s=>s.length>3);
+}
+
+function addToTranscript(text){
+  const norm = normalizePhrase(text);
+  if(!norm) return;
+
+  // Verifica se este texto (ou algo muito similar) já foi adicionado
+  // Compara por substring: se 80%+ das palavras já existem no finalText, ignora
+  const newWords = norm.split(' ');
+  const existingNorm = normalizePhrase(finalText);
+
+  if(existingNorm && newWords.length > 2){
+    // Conta quantas palavras já estão no texto existente (sequência)
+    if(existingNorm.includes(norm)){
+      return; // duplicata exata
+    }
+    // Verifica se é substring do final do texto atual (repetição de trecho)
+    const tail = existingNorm.slice(-norm.length - 20);
+    if(tail.includes(norm)) return;
+  }
+
+  finalText += (finalText ? ' ' : '') + text.trim();
+  document.getElementById('final-text').textContent = finalText;
+}
+
 function startNewSession(){
-  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if(!SR) return null;
-  const r=new SR();
-  // continuous=false é mais confiável no Android/iOS
-  // cada sessão dura ~60s e reiniciamos manualmente no onend
-  r.lang='pt-BR';
-  r.continuous=false;
-  r.interimResults=true;
-  r.maxAlternatives=1;
+  const r = new SR();
+  r.lang = 'pt-BR';
+  r.continuous = false;      // false = mais estável no Android
+  r.interimResults = true;
+  r.maxAlternatives = 1;
 
-  // Texto final JÁ confirmado desta sessão (para não repetir no onresult)
-  let sessionCommitted='';
+  let lastFinalInSession = ''; // último texto final desta instância
 
-  r.onresult=(e)=>{
-    let interim='';
-    let sessionNew='';
-    for(let i=0;i<e.results.length;i++){
-      const t=e.results[i][0].transcript;
+  r.onresult = (e) => {
+    let interim = '';
+    let allFinal = '';
+
+    for(let i = 0; i < e.results.length; i++){
+      const t = e.results[i][0].transcript;
       if(e.results[i].isFinal){
-        sessionNew+=(sessionNew?' ':'')+t.trim();
+        allFinal += (allFinal ? ' ' : '') + t.trim();
       } else {
-        interim+=t;
+        interim += t;
       }
     }
 
-    // Só adiciona ao global o que é realmente novo nesta sessão
-    if(sessionNew && sessionNew!==sessionCommitted){
-      // Pega só a parte nova (sufixo após o que já foi commitado)
-      let added='';
-      if(sessionCommitted==='' ){
-        added=sessionNew;
-      } else if(sessionNew.startsWith(sessionCommitted)){
-        added=sessionNew.slice(sessionCommitted.length).trim();
-      } else {
-        added=sessionNew; // fallback: sessão recomeçou do zero
+    // Só processa se há texto final novo (diferente do último desta sessão)
+    if(allFinal && allFinal !== lastFinalInSession){
+      // Pega só a parte nova (o que foi adicionado após o último final)
+      let newPart = allFinal;
+      if(lastFinalInSession && allFinal.startsWith(lastFinalInSession)){
+        newPart = allFinal.slice(lastFinalInSession.length).trim();
       }
-      if(added){
-        finalText+=(finalText?' ':'')+added;
-        sessionCommitted=sessionNew;
-        document.getElementById('final-text').textContent=finalText;
+      if(newPart){
+        addToTranscript(newPart);
+        lastFinalInSession = allFinal;
       }
     }
-    document.getElementById('interim').textContent=interim?' '+interim:'';
+
+    document.getElementById('interim').textContent = interim ? ' ' + interim : '';
   };
 
-  r.onerror=(e)=>{
-    if(e.error!=='no-speech'&&e.error!=='aborted') showErr('Microfone: '+e.error);
+  r.onerror = (e) => {
+    if(e.error !== 'no-speech' && e.error !== 'aborted'){
+      showErr('Microfone: ' + e.error);
+    }
   };
 
-  r.onend=()=>{
-    document.getElementById('interim').textContent='';
-    if(phase==='recording'){
-      // Pausa curta antes de reiniciar para o Android liberar o mic
-      setTimeout(()=>{
-        if(phase==='recording'){
-          const nr=startNewSession();
-          if(nr){rec=nr;try{nr.start();}catch(_){}}
+  r.onend = () => {
+    document.getElementById('interim').textContent = '';
+    if(phase === 'recording'){
+      setTimeout(() => {
+        if(phase === 'recording'){
+          const nr = startNewSession();
+          if(nr){ rec = nr; try{ nr.start(); }catch(_){} }
         }
-      },300);
+      }, 250);
     }
   };
 
@@ -451,43 +483,45 @@ function startNewSession(){
 
 function startRec(){
   clearErr();
-  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SR){showErr('Reconhecimento de voz não suportado. Use Chrome ou Edge.');return;}
-  const r=startNewSession();
-  if(!r){showErr('Erro ao iniciar reconhecimento.');return;}
-  rec=r;
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SR){ showErr('Reconhecimento de voz não suportado. Use Chrome ou Edge.'); return; }
+  addedPhrases.clear();
+  const r = startNewSession();
+  if(!r){ showErr('Erro ao iniciar reconhecimento.'); return; }
+  rec = r;
   try{
-    r.start();phase='recording';startTimer();animWave(true);
-    document.getElementById('timer').className='rec';
-    document.getElementById('rec-status').textContent='Gravando consulta...';
-    document.getElementById('transcript-box').style.display='block';
-    document.getElementById('patient-card').style.display='none';
-    document.getElementById('how-to').style.display='none';
-    document.getElementById('api-banner').style.display='none';
-    document.getElementById('rec-card').style.borderColor='rgba(217,64,64,.4)';
-    showBtns(['btn-pause','btn-generate']);setBadge('⏺ Gravando','#D94040');
-  }catch(e){showErr('Não foi possível acessar o microfone.');}
+    r.start();
+    phase = 'recording'; startTimer(); animWave(true);
+    document.getElementById('timer').className = 'rec';
+    document.getElementById('rec-status').textContent = 'Gravando consulta...';
+    document.getElementById('transcript-box').style.display = 'block';
+    document.getElementById('patient-card').style.display = 'none';
+    document.getElementById('how-to').style.display = 'none';
+    document.getElementById('api-banner').style.display = 'none';
+    document.getElementById('rec-card').style.borderColor = 'rgba(217,64,64,.4)';
+    showBtns(['btn-pause','btn-generate']); setBadge('⏺ Gravando','#D94040');
+  }catch(e){ showErr('Não foi possível acessar o microfone.'); }
 }
 
 function pauseRec(){
-  phase='paused';
-  rec&&rec.stop();
-  stopTimer();animWave(false);
-  document.getElementById('timer').className='';
-  document.getElementById('rec-status').textContent='Pausado';
-  document.getElementById('rec-card').style.borderColor='#D8E2EC';
-  document.getElementById('interim').textContent='';
-  showBtns(['btn-resume','btn-generate']);setBadge('⏸ Pausado','#E8900A');
+  phase = 'paused';
+  rec && rec.stop();
+  stopTimer(); animWave(false);
+  document.getElementById('timer').className = '';
+  document.getElementById('rec-status').textContent = 'Pausado';
+  document.getElementById('rec-card').style.borderColor = '#D8E2EC';
+  document.getElementById('interim').textContent = '';
+  showBtns(['btn-resume','btn-generate']); setBadge('⏸ Pausado','#E8900A');
 }
 
 function resumeRec(){
-  phase='recording';startTimer();animWave(true);
-  document.getElementById('timer').className='rec';
-  document.getElementById('rec-status').textContent='Gravando consulta...';
-  document.getElementById('rec-card').style.borderColor='rgba(217,64,64,.4)';
-  const r=startNewSession();
-  if(r){rec=r;try{r.start();}catch(_){}}
-  showBtns(['btn-pause','btn-generate']);setBadge('⏺ Gravando','#D94040');
+  phase = 'recording'; startTimer(); animWave(true);
+  document.getElementById('timer').className = 'rec';
+  document.getElementById('rec-status').textContent = 'Gravando consulta...';
+  document.getElementById('rec-card').style.borderColor = 'rgba(217,64,64,.4)';
+  const r = startNewSession();
+  if(r){ rec = r; try{ r.start(); }catch(_){} }
+  showBtns(['btn-pause','btn-generate']); setBadge('⏺ Gravando','#D94040');
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -524,15 +558,40 @@ Retorne SOMENTE um JSON válido (sem markdown, sem texto extra) com as chaves:
 subjetivo, objetivo, avaliacao, plano, observacoes`;
 
   try{
-    // Modelos disponíveis no free tier, em ordem de preferência
-    const models=[
-      'gemini-2.0-flash-lite',
-      'gemini-1.5-flash-8b',
-      'gemini-1.5-flash',
-    ];
+    // Busca modelos disponíveis dinamicamente e tenta em ordem
+    let availableModels=[];
+    try{
+      const listRes=await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`
+      );
+      const listData=await listRes.json();
+      if(listData.models){
+        // Filtra só modelos que suportam generateContent, priorizando flash
+        availableModels=listData.models
+          .filter(m=>m.supportedGenerationMethods&&m.supportedGenerationMethods.includes('generateContent'))
+          .map(m=>m.name.replace('models/',''))
+          .filter(m=>m.includes('flash')||m.includes('gemini-2'))
+          .sort((a,b)=>{
+            // Prioridade: 2.5-flash > 2.0-flash > outros
+            const score=m=>{
+              if(m.includes('2.5')&&m.includes('flash')&&!m.includes('lite')) return 0;
+              if(m.includes('2.5')&&m.includes('lite')) return 1;
+              if(m.includes('2.0')&&m.includes('flash')) return 2;
+              return 3;
+            };
+            return score(a)-score(b);
+          });
+      }
+    }catch(_){}
+
+    // Fallback se não conseguiu listar
+    if(availableModels.length===0){
+      availableModels=['gemini-2.5-flash','gemini-2.0-flash','gemini-2.5-flash-lite-preview-06-17'];
+    }
+
     let data=null;
     let lastErr='';
-    for(const model of models){
+    for(const model of availableModels){
       try{
         const res=await fetch(
           `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
@@ -540,7 +599,7 @@ subjetivo, objetivo, avaliacao, plano, observacoes`;
            body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{temperature:0.2,maxOutputTokens:2048}})}
         );
         const d=await res.json();
-        if(d.error){lastErr=d.error.message||'Erro';continue;}
+        if(d.error){lastErr=`${model}: ${d.error.message||'Erro'}`;continue;}
         data=d; break;
       }catch(e){lastErr=e.message;continue;}
     }
@@ -778,7 +837,7 @@ ATENÇÃO: Revisar antes de inserir no prontuário oficial.`;
 //  RESET
 // ══════════════════════════════════════════════════════════════
 function resetApp(){
-  rec&&rec.stop();rec=null;finalText='';elapsed=0;phase='idle';currentSoap=null;processedCount=0;stopTimer();animWave(false);
+  rec&&rec.stop();rec=null;finalText='';elapsed=0;phase='idle';currentSoap=null;processedCount=0;addedPhrases.clear();stopTimer();animWave(false);
   document.getElementById('timer').textContent='00:00';document.getElementById('timer').className='';
   document.getElementById('rec-status').textContent='Pronto para gravar';
   document.getElementById('rec-card').style.borderColor='#D8E2EC';
